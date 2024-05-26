@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math/rand"
 	"runtime"
-	"sync"
 	"testing"
 	"time"
 )
@@ -48,7 +47,6 @@ func BenchmarkAsynMemDel(b *testing.B) {
 	lc := NewLocalCache(100, 100, 10*time.Second)
 	printMem("new mem")
 
-	sync.Cond{}
 	for {
 		time.Sleep(time.Second * 5)
 		for i := 0; i < 10000; i++ {
