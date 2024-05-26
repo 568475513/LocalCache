@@ -2,39 +2,43 @@ package local_cache
 
 import (
 	"fmt"
-	"sync"
+	"runtime"
 	"testing"
 	"time"
 )
 
-func TestLruLocalCache(t *testing.T) {
+func BenchmarkLruAsynDel(b *testing.B) {
+	lruC := NewLruLocalCache(10000)
 
-	var wg sync.WaitGroup
-	printlnMem("first record")
+	startT := time.Now()
+	for i := 0; i < b.N; i++ {
+		go func() {
+			lruC.Put(fmt.Sprintf("alive_id_xxx%v", i), i, NoExpiration)
+		}()
+	}
+	for i := 0; i < b.N; i++ {
+		lruC.Get(fmt.Sprintf("alive_id_xxx%v", i))
+	}
+	b.Log(time.Since(startT))
+}
+
+func BenchmarkLruMemDel(b *testing.B) {
+
+	printMem("begin")
 	lc := NewLruLocalCache(10000)
-	printlnMem("second record")
+	printMem("new mem")
 
-	now := time.Now()
-
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		for i := 0; i < 1000000; i++ {
-			_ = lc.Put(fmt.Sprintf("alive_id_xxx%v", i), i, time.Second*5)
+	for {
+		time.Sleep(time.Second * 5)
+		for i := 0; i < 10000; i++ {
+			go func(i int) {
+				lc.Put(GenerateRandomString(10), i, 20*time.Second)
+			}(i)
 		}
-	}()
 
-	go func() {
-		defer wg.Done()
-		for i := 0; i < 1000000; i++ {
-			lc.Get(fmt.Sprintf("alive_id_xxx%v", i))
-		}
-	}()
-	wg.Wait()
-	fmt.Println(fmt.Sprintf("func deal with time: %v", time.Since(now)))
-	//lc.Set("b", 2)
-	//lc.Set("c", 3)
-	//lc.Set("你好", 4)
-	//lc.Set("什么", 5)
-	//printlnMem()
+		runtime.GC()
+		lc.Get("xxx")
+		printMem("after gc")
+	}
+
 }
