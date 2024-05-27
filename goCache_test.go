@@ -3,30 +3,39 @@ package local_cache
 import (
 	"fmt"
 	gc "github.com/patrickmn/go-cache"
+	"sync"
 	"testing"
 	"time"
 )
 
-var gC = gc.New(60*time.Second, 60*time.Hour)
+var (
+	wg sync.WaitGroup
+	gC = gc.New(60*time.Second, 60*time.Hour)
+)
 
 func BenchmarkGoCacheSet(b *testing.B) {
-	b.StartTimer()
 	for i := 0; i < b.N; i++ {
-		gC.Set(fmt.Sprintf("alive_id_xxx%v", i), i, NoExpiration)
+		gC.Set(GenerateRandomString(10), i, NoExpiration)
 	}
-	b.StopTimer()
+}
+
+func BenchmarkGoCacheGet(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		gC.Get(GenerateRandomString(10))
+	}
 }
 
 func BenchmarkGoCacheAsynDel(b *testing.B) {
-
-	startT := time.Now()
 	for i := 0; i < b.N; i++ {
+		wg.Add(1)
 		go func(i int) {
-			gC.Set(fmt.Sprintf("alive_id_xxx%v", i), i, NoExpiration)
+			defer wg.Done()
+			gC.Set(fmt.Sprintf("alive_id_%d", i), i, NoExpiration)
 		}(i)
 	}
+
 	for i := 0; i < b.N; i++ {
-		gC.Get(fmt.Sprintf("alive_id_xxx%v", i))
+		gC.Get(fmt.Sprintf("alive_id_%d", i))
 	}
-	b.Log(time.Since(startT))
+	wg.Wait()
 }

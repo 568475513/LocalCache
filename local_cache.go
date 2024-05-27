@@ -55,8 +55,7 @@ func NewLocalCache(bucketLen, itemLen int, cleanTime time.Duration) *LC {
 	LocalCache := &LC{lc}
 
 	for i := 0; i < bucketLen; i++ {
-		b := lc.newBucket()
-		lc.bucketsDta[i] = b
+		lc.bucketsDta[i] = lc.newBucket()
 	}
 	if cleanTime > 0 {
 		go lc.clearBucket(cleanTime)

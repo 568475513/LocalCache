@@ -33,12 +33,9 @@ func BenchmarkLocalCache_LruSet(b *testing.B) {
 }
 
 func BenchmarkLocalCache_Get(b *testing.B) {
-	lc := NewLocalCache(10000, 1000, 60*time.Second)
-	b.StartTimer()
 	for i := 0; i < b.N; i++ {
-		lc.Get(fmt.Sprintf("alive_id_xxx%v", i))
+		lc.Get(GenerateRandomString(10))
 	}
-	b.StopTimer()
 }
 
 func BenchmarkAsynMemDel(b *testing.B) {
@@ -62,20 +59,22 @@ func BenchmarkAsynMemDel(b *testing.B) {
 
 }
 
+var lc = NewLocalCache(100, 100, 10*time.Second)
+
 func BenchmarkAsynDel(b *testing.B) {
 
-	lc := NewLocalCache(10000, 1000, 60*time.Second)
-	startT := time.Now()
 	for i := 0; i < b.N; i++ {
-		go func() {
-			lc.Set(fmt.Sprintf("alive_id_xxx%v", i), i, NoExpiration)
-		}()
-	}
-	for i := 0; i < b.N; i++ {
-		lc.Get(fmt.Sprintf("alive_id_xxx%v", i))
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			lc.Set(fmt.Sprintf("alive_id_%d", i), i, NoExpiration)
+		}(i)
 	}
 
-	b.Log(time.Since(startT))
+	for i := 0; i < b.N; i++ {
+		lc.Get(fmt.Sprintf("alive_id_%d", i))
+	}
+	wg.Wait()
 }
 
 func BenchmarkLruLocalCache(b *testing.B) {
