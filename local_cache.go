@@ -202,27 +202,24 @@ func (l *localCache) Set(key string, value any, t time.Duration) {
 
 func (b *bucket) set(key string, value any, t int64) {
 
-	b.rwMu.RLock()
+	b.rwMu.Lock()
 	item, ok := b.items[key]
 	if ok { //更新key
-		b.rwMu.RUnlock()
-		b.rwMu.Lock()
 		item.value, item.Expiration = value, t
-		b.moveToHead(item)
 		b.rwMu.Unlock()
+		b.moveToHead(item)
 	} else { //新增key
-		b.rwMu.RUnlock()
-		b.rwMu.Lock()
-		item = &Item{key: key, value: value, Expiration: t}
-		b.items[key] = item
-		b.moveToBucketHead(item)
-		if len(b.items) > int(b.itemLen) {
+		if len(b.items) >= int(b.itemLen) { //提前判断map容量 防止map扩容
 			tailPre := b.tail.preI
 			b.removeFromBucket(tailPre)
 			delete(b.items, tailPre.key)
 		}
+		item = &Item{key: key, value: value, Expiration: t}
+		b.items[key] = item
+		b.moveToBucketHead(item)
 		b.rwMu.Unlock()
 	}
+
 }
 
 func (l *localCache) Del(key string) {
@@ -245,8 +242,10 @@ func (i *Item) isExpire() bool {
 }
 
 func (b *bucket) moveToHead(item *Item) {
+	b.rwMu.Lock()
 	b.removeFromBucket(item)
 	b.moveToBucketHead(item)
+	b.rwMu.Unlock()
 }
 
 // removeFromBucket 从桶链表移除节点

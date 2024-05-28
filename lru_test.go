@@ -7,19 +7,29 @@ import (
 	"time"
 )
 
-func BenchmarkLruAsynDel(b *testing.B) {
-	lruC := NewLruLocalCache(10000)
+var lruCache = NewLruLocalCache(100000)
 
-	startT := time.Now()
+func BenchmarkLruAsynDel(b *testing.B) {
+
+	//lc := NewLocalCache(100, 100, 10*time.Second)
 	for i := 0; i < b.N; i++ {
-		go func() {
-			lruC.Put(fmt.Sprintf("alive_id_xxx%v", i), i, NoExpiration)
-		}()
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			lruCache.Put(fmt.Sprintf("alive_id_%d", i), i, NoExpiration)
+		}(i)
 	}
+
+	//time.Sleep(time.Second)
+
 	for i := 0; i < b.N; i++ {
-		lruC.Get(fmt.Sprintf("alive_id_xxx%v", i))
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			lruCache.Get(fmt.Sprintf("alive_id_%d", i))
+		}(i)
 	}
-	b.Log(time.Since(startT))
+	wg.Wait()
 }
 
 func BenchmarkLruMemDel(b *testing.B) {

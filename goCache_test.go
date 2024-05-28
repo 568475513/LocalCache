@@ -26,6 +26,8 @@ func BenchmarkGoCacheGet(b *testing.B) {
 }
 
 func BenchmarkGoCacheAsynDel(b *testing.B) {
+
+	//lc := NewLocalCache(100, 100, 10*time.Second)
 	for i := 0; i < b.N; i++ {
 		wg.Add(1)
 		go func(i int) {
@@ -34,8 +36,14 @@ func BenchmarkGoCacheAsynDel(b *testing.B) {
 		}(i)
 	}
 
+	//time.Sleep(time.Second)
+
 	for i := 0; i < b.N; i++ {
-		gC.Get(fmt.Sprintf("alive_id_%d", i))
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			gC.Get(fmt.Sprintf("alive_id_%d", i))
+		}(i)
 	}
 	wg.Wait()
 }
