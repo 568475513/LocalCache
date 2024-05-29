@@ -142,19 +142,17 @@ func (l *localCache) clearBucket(ct time.Duration) {
 
 // 这个淘汰策略 遍历整个数据结构 频繁触发会引起性能抖动；聪明的你一定知道还有更好的策略
 func (l *localCache) delBucketsData() {
-	for k, v := range l.bucketsDta {
-		v.rwMu.RLock()
+	for _, v := range l.bucketsDta {
+		v.rwMu.Lock()
 		if len(v.items) > 0 { //旧桶key过期替换逻辑
-			b := l.newBucket()
 			for key, val := range v.items {
-				if !val.isExpire() {
-					b.items[key] = val
-					b.moveToBucketHead(val)
+				if val.isExpire() {
+					delete(v.items, key)
+					v.removeFromBucket(val)
 				}
 			}
-			l.bucketsDta[k] = b
 		}
-		v.rwMu.RUnlock()
+		v.rwMu.Unlock()
 	}
 }
 
