@@ -140,7 +140,7 @@ func (l *localCache) clearBucket(ct time.Duration) {
 	}
 }
 
-// 这个淘汰策略 遍历整个数据结构 频繁触发会引起性能抖动；聪明的你一定知道还有更好的策略
+// 这个淘汰策略 遍历整个数据结构 频繁触发会引起性能抖动；这里尝试过new map的方式对gc更友好 但需要对整个数据结构上锁 实属没必要了
 func (l *localCache) delBucketsData() {
 	for _, v := range l.bucketsDta {
 		v.rwMu.Lock()
