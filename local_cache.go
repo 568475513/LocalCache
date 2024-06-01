@@ -24,7 +24,7 @@ type LC struct {
 type localCache struct {
 	bucketsDta []*bucket
 	bucketLen  uint32
-	itemLen    uint16
+	itemLen    uint32
 	seed       uint32
 	stopCh     chan struct{}
 }
@@ -32,7 +32,7 @@ type localCache struct {
 type bucket struct {
 	rwMu       sync.RWMutex
 	items      map[string]*Item
-	itemLen    uint16
+	itemLen    uint32
 	head, tail *Item //桶链头尾指针地址
 }
 
@@ -47,7 +47,7 @@ func NewLocalCache(bucketLen, itemLen int, cleanTime time.Duration) *LC {
 
 	lc := &localCache{
 		bucketLen:  uint32(bucketLen), // 定义桶长度
-		itemLen:    uint16(itemLen),   // 定义链表长度
+		itemLen:    uint32(itemLen),   // 定义链表长度
 		bucketsDta: make([]*bucket, bucketLen),
 		seed:       newSeed(),
 		stopCh:     make(chan struct{}),
@@ -140,17 +140,20 @@ func (l *localCache) clearBucket(ct time.Duration) {
 	}
 }
 
-// 这个淘汰策略 遍历整个数据结构 频繁触发会引起性能抖动；这里尝试过new map的方式对gc更友好 但需要对整个数据结构上锁 实属没必要了
+// 这个淘汰策略 遍历整个数据结构 频繁触发会引起性能抖动
 func (l *localCache) delBucketsData() {
-	for _, v := range l.bucketsDta {
+	for k, v := range l.bucketsDta {
 		v.rwMu.Lock()
 		if len(v.items) > 0 { //旧桶key过期替换逻辑
+			b := l.newBucket()
 			for key, val := range v.items {
-				if val.isExpire() {
-					delete(v.items, key)
-					v.removeFromBucket(val)
+				if !val.isExpire() {
+					newItem := &Item{key: val.key, value: val.value, Expiration: val.Expiration}
+					b.items[key] = newItem
+					b.moveToBucketHead(newItem)
 				}
 			}
+			l.bucketsDta[k] = b
 		}
 		v.rwMu.Unlock()
 	}
@@ -166,23 +169,21 @@ func (l *localCache) Get(key string) (any, bool) {
 
 func (b *bucket) get(key string) (any, bool) {
 
-	b.rwMu.RLock()
+	b.rwMu.Lock()
 	item, found := b.items[key]
 	if !found {
-		b.rwMu.RUnlock()
+		b.rwMu.Unlock()
 		return nil, false
 	}
 
 	if item.Expiration != int64(NoExpiration) && item.Expiration < time.Now().Unix() {
-		b.rwMu.RUnlock()
+		b.rwMu.Unlock()
 		//这里采用懒加载的方式删除
 		b.del(key)
 		return nil, false
 	}
-	b.rwMu.RUnlock()
-
-	b.moveToHead(item) // 移动至链表头部
-
+	b.moveToHead(item)
+	b.rwMu.Unlock()
 	return item.value, true
 }
 
@@ -204,8 +205,8 @@ func (b *bucket) set(key string, value any, t int64) {
 	item, ok := b.items[key]
 	if ok { //更新key
 		item.value, item.Expiration = value, t
-		b.rwMu.Unlock()
 		b.moveToHead(item)
+		b.rwMu.Unlock()
 	} else { //新增key
 		if len(b.items) >= int(b.itemLen) { //提前判断map容量 防止map扩容
 			tailPre := b.tail.preI
@@ -240,10 +241,8 @@ func (i *Item) isExpire() bool {
 }
 
 func (b *bucket) moveToHead(item *Item) {
-	b.rwMu.Lock()
 	b.removeFromBucket(item)
 	b.moveToBucketHead(item)
-	b.rwMu.Unlock()
 }
 
 // removeFromBucket 从桶链表移除节点

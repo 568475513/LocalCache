@@ -11,19 +11,13 @@ var lruCache = NewLruLocalCache(100000)
 
 func BenchmarkLruAsynDel(b *testing.B) {
 
-	//lc := NewLocalCache(100, 100, 10*time.Second)
 	for i := 0; i < b.N; i++ {
-		wg.Add(1)
+		wg.Add(2)
 		go func(i int) {
 			defer wg.Done()
 			lruCache.Put(fmt.Sprintf("alive_id_%d", i), i, NoExpiration)
 		}(i)
-	}
 
-	//time.Sleep(time.Second)
-
-	for i := 0; i < b.N; i++ {
-		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
 			lruCache.Get(fmt.Sprintf("alive_id_%d", i))

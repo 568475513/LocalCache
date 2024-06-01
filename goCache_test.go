@@ -29,17 +29,12 @@ func BenchmarkGoCacheAsynDel(b *testing.B) {
 
 	//lc := NewLocalCache(100, 100, 10*time.Second)
 	for i := 0; i < b.N; i++ {
-		wg.Add(1)
+		wg.Add(2)
 		go func(i int) {
 			defer wg.Done()
 			gC.Set(fmt.Sprintf("alive_id_%d", i), i, NoExpiration)
 		}(i)
-	}
 
-	//time.Sleep(time.Second)
-
-	for i := 0; i < b.N; i++ {
-		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
 			gC.Get(fmt.Sprintf("alive_id_%d", i))

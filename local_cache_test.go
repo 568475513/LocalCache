@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-var lc = NewLocalCache(100, 1000, 5*time.Second)
+//var lc = NewLocalCache(100, 1000, 2*time.Second)
 
 func BenchmarkLocalCache_Set(b *testing.B) {
 	lc := NewLocalCache(10000, 1000, 60*time.Second)
@@ -45,46 +45,65 @@ const data = "{\"code\":0,\"msg\":\"OK\",\"data\":{\"alive_conf\":{\"alive_mode\
 func BenchmarkAsynMemDel(b *testing.B) {
 
 	printMem("begin")
-	lc := NewLocalCache(1000, 100, 20*time.Second)
+	lc := NewLocalCache(100, 1000, 5*time.Second)
 	printMem("new mem")
 
 	for i := 0; i < 100; i++ {
 		wg.Add(1)
 		go func() {
+			//time.Sleep(time.Second * time.Duration(rand.Intn(10)+1))
 			for ii := 0; ii < 10000; ii++ {
-				lc.Set(GenerateRandomString(10), data, NoExpiration)
+				lc.Set(GenerateRandomString(10), data, time.Second*2)
 			}
 			wg.Done()
 		}()
 	}
-
+	time.Sleep(time.Second * 10)
+	printMem("after set")
 	for {
-		time.Sleep(time.Second * 2)
-		//for i := 0; i < 10000; i++ {
+		time.Sleep(time.Second * 5)
 		lc.Get(GenerateRandomString(10))
-		//}
-		//
 		runtime.GC()
 		printMem("after gc")
+
 	}
 
 }
 
 func BenchmarkAsynDel(b *testing.B) {
 
-	//lc := NewLocalCache(100, 100, 10*time.Second)
-	for i := 0; i < b.N; i++ {
-		wg.Add(1)
+	lc := NewLocalCache(1, 10, 2*time.Second)
+	for i := 0; i < 100000; i++ {
+		wg.Add(2)
 		go func(i int) {
 			defer wg.Done()
 			lc.Set(fmt.Sprintf("alive_id_%d", i), i, NoExpiration)
 		}(i)
+
+		go func(i int) {
+			defer wg.Done()
+			lc.Get(fmt.Sprintf("alive_id_%d", i))
+		}(i)
 	}
+	wg.Wait()
+	fmt.Println(lc.bucketsDta[0].items)
+	lc.bucketsDta[0].ListLRUCache()
+	time.Sleep(4 * time.Second)
 
-	//time.Sleep(time.Second)
+	fmt.Println(lc.bucketsDta[0].items)
+	lc.bucketsDta[0].ListLRUCache()
+	fmt.Println("1")
+}
 
+func BenchmarkLruReadDel(b *testing.B) {
+	lc := NewLocalCache(100, 1000, 5*time.Second)
 	for i := 0; i < b.N; i++ {
-		wg.Add(1)
+		wg.Add(2)
+		go func(i int) {
+			defer wg.Done()
+			lc.Set(fmt.Sprintf("alive_id_%d", i), i, NoExpiration)
+		}(i)
+
 		go func(i int) {
 			defer wg.Done()
 			lc.Get(fmt.Sprintf("alive_id_%d", i))
