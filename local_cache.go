@@ -30,7 +30,8 @@ type localCache struct {
 }
 
 type bucket struct {
-	rwMu       sync.RWMutex
+	Mu         sync.RWMutex
+	htMu       sync.Mutex
 	items      map[string]*Item
 	itemLen    uint32
 	head, tail *Item //桶链头尾指针地址
@@ -143,7 +144,7 @@ func (l *localCache) clearBucket(ct time.Duration) {
 // 这个淘汰策略 遍历整个数据结构 频繁触发会引起性能抖动
 func (l *localCache) delBucketsData() {
 	for k, v := range l.bucketsDta {
-		v.rwMu.Lock()
+		v.Mu.Lock()
 		if len(v.items) > 0 { //旧桶key过期替换逻辑
 			b := l.newBucket()
 			for key, val := range v.items {
@@ -155,7 +156,7 @@ func (l *localCache) delBucketsData() {
 			}
 			l.bucketsDta[k] = b
 		}
-		v.rwMu.Unlock()
+		v.Mu.Unlock()
 	}
 }
 
@@ -169,21 +170,23 @@ func (l *localCache) Get(key string) (any, bool) {
 
 func (b *bucket) get(key string) (any, bool) {
 
-	b.rwMu.Lock()
+	b.Mu.RLock()
 	item, found := b.items[key]
 	if !found {
-		b.rwMu.Unlock()
+		b.Mu.RUnlock()
 		return nil, false
 	}
 
 	if item.Expiration != int64(NoExpiration) && item.Expiration < time.Now().Unix() {
-		b.rwMu.Unlock()
+		b.Mu.RUnlock()
 		//这里采用懒加载的方式删除
 		b.del(key)
 		return nil, false
 	}
+	b.htMu.Lock()
 	b.moveToHead(item)
-	b.rwMu.Unlock()
+	b.htMu.Unlock()
+	b.Mu.RUnlock()
 	return item.value, true
 }
 
@@ -201,12 +204,14 @@ func (l *localCache) Set(key string, value any, t time.Duration) {
 
 func (b *bucket) set(key string, value any, t int64) {
 
-	b.rwMu.Lock()
+	b.Mu.Lock()
 	item, ok := b.items[key]
 	if ok { //更新key
 		item.value, item.Expiration = value, t
+		b.htMu.Lock()
 		b.moveToHead(item)
-		b.rwMu.Unlock()
+		b.htMu.Unlock()
+		b.Mu.Unlock()
 	} else { //新增key
 		if len(b.items) >= int(b.itemLen) { //提前判断map容量 防止map扩容
 			tailPre := b.tail.preI
@@ -216,7 +221,7 @@ func (b *bucket) set(key string, value any, t int64) {
 		item = &Item{key: key, value: value, Expiration: t}
 		b.items[key] = item
 		b.moveToBucketHead(item)
-		b.rwMu.Unlock()
+		b.Mu.Unlock()
 	}
 
 }
@@ -227,8 +232,8 @@ func (l *localCache) Del(key string) {
 
 func (b *bucket) del(key string) {
 
-	b.rwMu.Lock()
-	defer b.rwMu.Unlock()
+	b.Mu.Lock()
+	defer b.Mu.Unlock()
 	b.removeFromBucket(b.items[key])
 	delete(b.items, key)
 }
